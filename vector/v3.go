@@ -3,6 +3,7 @@ package vector
 import (
 	"fmt"
 	"math"
+	"math/rand"
 )
 
 // V3 represents a 3 component vector (x, y, and z usually)
@@ -91,4 +92,28 @@ func (v V3) Eq(a V3) bool {
 // UNTESTED + PROBABLY WRONG
 func (v V3) Q() Q {
 	return Q{0.0, v.X, v.Y, v.Z}
+}
+
+// https://karthikkaranth.me/blog/generating-random-points-in-a-sphere/
+// My first attempt at this was pretty wrong. This blog post describes some much better alogorithms.
+func RandV3(lr *rand.Rand) V3 {
+	u := lr.Float64()
+	v := lr.Float64()
+
+	θ := τ * u
+	φ := math.Acos(2*v - 1)
+	r := math.Cbrt(lr.Float64())
+	//r := math.Pow(lr.Float64(), 1.0/3.0)
+
+	sθ := math.Sin(θ)
+	cθ := math.Cos(θ)
+
+	sφ := math.Sin(φ)
+	cφ := math.Cos(φ)
+
+	return V3{
+		r * sφ * cθ,
+		r * sφ * sθ,
+		r * cφ,
+	}
 }

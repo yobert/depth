@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	"time"
 	//	"image/png"
@@ -51,29 +50,15 @@ func (img Fimg) BlotLine(lr *rand.Rand, mm, mv vector.M44, cam vector.Camera, ra
 		a := 1.0
 
 		r := m * math.Pow(math.Abs(f-d), e)
-		w := v.Add(rndSphere(lr, r))
+		w := v.Add(vector.RandV3(lr).Scale(r))
 
 		c := Fcolor{1, 1, 1, a}
 		img.BlotPoint(mv, w, c)
 	}
 }
 
-func rndSphere(lr *rand.Rand, r float64) vector.V3 {
-	v := vector.V3{
-		lr.Float64()*2.0 - 1.0,
-		lr.Float64()*2.0 - 1.0,
-		lr.Float64()*2.0 - 1.0,
-	}
-	v = v.Normalize()
-	return v.Scale(r)
-}
-
 func render(input inputType) *widget.Box {
-	frame := input.Frame
-	fmt.Println(frame)
-	rot := input.Rot
-
-	mm := vector.RotateAxisM33(vector.V3{0, -1, 0}, rot)
+	mm := vector.RotateAxisM33(vector.V3{0, -1, 0}, input.Rot)
 
 	lr := rand.New(rand.NewSource(1).(rand.Source64))
 	lr.Seed(666)
@@ -86,11 +71,11 @@ func render(input inputType) *widget.Box {
 		Width:  float64(acc.Rect.Dx()),
 		Height: float64(acc.Rect.Dy()),
 
-		YFov: 60,
+		YFov: 120,
 		Near: 0.1,
 		Far:  100,
 
-		Position: vector.V3{0, 0, 2.2},
+		Position: vector.V3{0, 0, 1.2},
 		RotAxis:  vector.Euler{
 			//			X: 0.01,
 		},
@@ -142,10 +127,12 @@ func render(input inputType) *widget.Box {
 			}*/
 
 	for i := 0; i < 10000; i++ {
-		b := rndSphere(lr, 1)
+		b := vector.RandV3(lr)
 		b = b.Normalize()
 
-		acc.BlotPoint(mm.M44(), b, Fcolor{1, 1, 1, 1})
+		b = mm.MultV3(b)
+
+		acc.BlotPoint(mv, b, Fcolor{1, 1, 1, 1})
 	}
 
 	/*	for x := -1.0; x < 1.0; x += 0.1 {
@@ -274,7 +261,8 @@ func main() {
 	go func() {
 		for vb := range showchan {
 			//time.Sleep(time.Second / 120)
-			time.Sleep(1)
+			time.Sleep(time.Second / 60)
+			//time.Sleep(1)
 			w.SetContent(vb)
 		}
 	}()
