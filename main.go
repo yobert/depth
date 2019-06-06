@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	"time"
 	//	"image/png"
@@ -17,8 +18,9 @@ import (
 )
 
 type inputType struct {
-	Rot   vector.Radian
-	Frame int
+	Width, Height int
+	Rot           vector.Radian
+	Frame         int
 }
 
 func (f Fimg) BlotPoint(mv vector.M44, p vector.V3, c Fcolor) {
@@ -57,19 +59,20 @@ func (img Fimg) BlotLine(lr *rand.Rand, mm, mv vector.M44, cam vector.Camera, ra
 	}
 }
 
-func render(input inputType) *widget.Box {
+func render(input inputType) interface{} {
 	mm := vector.RotateAxisM33(vector.V3{0, -1, 0}, input.Rot)
 
 	lr := rand.New(rand.NewSource(1).(rand.Source64))
 	lr.Seed(666)
 
-	s := 200
+	sx := input.Width / 2
+	sy := input.Height / 2
 
-	acc := NewFimg(image.Rect(-s, -s, s, s))
+	acc := NewFimg(image.Rect(-sx, -sy, sx-1, sy-1))
 
 	cam := vector.Camera{
-		Width:  float64(acc.Rect.Dx()),
-		Height: float64(acc.Rect.Dy()),
+		Width:  float64(input.Width),
+		Height: float64(input.Height),
 
 		YFov: 120,
 		Near: 0.1,
@@ -191,7 +194,6 @@ func render(input inputType) *widget.Box {
 
 	img := acc.ToNRGBA()
 
-	_ = img
 	/*		w, err := os.Create(fmt.Sprintf("frame%08d.png", frame))
 			if err != nil {
 				fmt.Println(err)
@@ -205,31 +207,24 @@ func render(input inputType) *widget.Box {
 
 		}*/
 
-	ica := canvas.NewRasterFromImage(img)
-	ica.SetMinSize(fyne.NewSize(img.Rect.Max.X, img.Rect.Max.Y))
-	vb := widget.NewVBox(ica)
-	return vb
+	return img
 }
 
 func main() {
+	width := 640
+	height := 480
+
 	za := app.New()
 	w := za.NewWindow("main")
-	w.SetContent(widget.NewVBox(
-		widget.NewLabel("Rendering first frame..."),
-		widget.NewButton("Quit", func() {
-			za.Quit()
-		}),
-	))
-	w.Show()
 
-	showchan := make(chan *widget.Box)
+	showchan := make(chan interface{})
 	inputs := make(chan inputType)
 
 	go func() {
 		frame := 0
 		for {
 			for rot := vector.Radian(0); rot < 2*math.Pi; rot += 0.001 {
-				inputs <- inputType{Rot: rot, Frame: frame}
+				inputs <- inputType{Width: width, Height: height, Rot: rot, Frame: frame}
 				frame++
 			}
 		}
@@ -237,13 +232,13 @@ func main() {
 	}()
 
 	go func() {
-		results := make(chan chan *widget.Box, 4)
+		results := make(chan chan interface{}, 4)
 
 		go func() {
 			for input := range inputs {
-				rc := make(chan *widget.Box)
+				rc := make(chan interface{})
 				results <- rc
-				go func(input inputType, rc chan *widget.Box) {
+				go func(input inputType, rc chan interface{}) {
 					rc <- render(input)
 					close(rc)
 				}(input, rc)
@@ -258,15 +253,32 @@ func main() {
 		close(showchan)
 	}()
 
+	baseimg := image.NRGBA{}
+
+	ica := canvas.NewRasterFromImage(&baseimg)
+	ica.SetMinSize(fyne.NewSize(width, height))
+
+	vb := widget.NewVBox(ica)
+
 	go func() {
-		for vb := range showchan {
+
+		for res := range showchan {
 			//time.Sleep(time.Second / 120)
 			time.Sleep(time.Second / 60)
 			//time.Sleep(1)
-			w.SetContent(vb)
+			img, ok := res.(*image.NRGBA)
+			if !ok {
+				fmt.Printf("not ok: %T\n", res)
+				continue
+			}
+
+			baseimg = *img
+			widget.Refresh(vb)
 		}
 	}()
 
+	w.SetContent(vb)
+	w.Show()
 	za.Run()
 	return
 }
