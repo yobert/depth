@@ -84,7 +84,15 @@ func (f Fimg) Blot(x, y float64, c Fcolor) {
 }
 
 func (f Fimg) ToNRGBA() *image.NRGBA {
-	img := image.NewNRGBA(f.Rect)
+	r := f.Rect
+
+	r.Max.X -= r.Min.X
+	r.Min.X = 0
+
+	r.Max.Y -= r.Min.Y
+	r.Min.Y = 0
+
+	img := image.NewNRGBA(r)
 
 	for i, v := range f.Pix {
 		c := int(v * 255.0)
