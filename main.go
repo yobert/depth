@@ -23,12 +23,45 @@ type inputType struct {
 	Frame         int
 }
 
-func (f Fimg) BlotPoint(mv vector.M44, p vector.V3, c Fcolor) {
+func (f Fimg) BlotPoint(lr *rand.Rand, mv vector.M44, p vector.V3, c Fcolor) {
 	p4 := vector.V4{p.X, p.Y, p.Z, 1}
 	p4 = mv.MultV4(p4)
 	pp := p4.HomogeneousToCartesian()
-	if pp.Z > -1 && pp.Z < 1 {
-		f.Blot(pp.X, pp.Y, c)
+
+	// out of the clipping plane?
+	if pp.Z < -1 || pp.Z > 1 {
+		return
+	}
+
+	x := pp.X
+	y := pp.Y
+
+	w, h := f.Rect.Dx(), f.Rect.Dy()
+
+	x += 1
+	y += 1
+
+	x *= 0.5
+	y *= 0.5
+
+	x *= float64(w)
+	y *= float64(h)
+
+	antialias := 1
+	for i := 0; i < antialias*4; i++ {
+		ix := f.Rect.Min.X + int(x+(rand.Float64()*2.0-1.0))
+		iy := f.Rect.Min.Y + int(y+(rand.Float64()*2.0-1.0))
+
+		oldc := f.Get(ix, iy)
+
+		newc := Fcolor{
+			c.R*c.A/float64(antialias) + oldc.R,
+			c.G*c.A/float64(antialias) + oldc.G,
+			c.B*c.A/float64(antialias) + oldc.B,
+			0,
+		}
+
+		f.Set(ix, iy, newc)
 	}
 }
 
@@ -48,14 +81,14 @@ func (img Fimg) BlotLine(lr *rand.Rand, mm, mv vector.M44, cam vector.Camera, ra
 
 		//a := 1.0 / (math.Pow(d, 2))
 		//a *= 0.1
-		//a := 0.005
-		a := 1.0
+		a := 0.005
+		//a := 1.0
 
 		r := m * math.Pow(math.Abs(f-d), e)
 		w := v.Add(vector.RandV3(lr).Scale(r))
 
 		c := Fcolor{1, 1, 1, a}
-		img.BlotPoint(mv, w, c)
+		img.BlotPoint(lr, mv, w, c)
 	}
 }
 
@@ -114,29 +147,29 @@ func render(input inputType) interface{} {
 		}
 	}
 
-	/*		a := rndSphere(lr, 1)
-			for i := 0; i < 10000; i++ {
-				b := rndSphere(lr, 0.07)
-				b = a.Add(b)
-				b = b.Normalize()
+	a := vector.RandV3(lr)
+	for i := 0; i < 1000; i++ {
+		b := vector.RandV3(lr).Scale(0.7)
+		b = a.Add(b)
+		b = b.Normalize()
 
-				//mmm := mv.Mult(mm.M44())
-				//mmm := mm.M44().Inverse().Mult(mv)
-				//mmm := mm.M44().Mult(mv.Inverse()).Inverse()
+		//mmm := mv.Mult(mm.M44())
+		//mmm := mm.M44().Inverse().Mult(mv)
+		//mmm := mm.M44().Mult(mv.Inverse()).Inverse()
 
-				acc.BlotLine(lr, mm.M44(), mv, cam, vector.Line{Start: a, End: b})
+		acc.BlotLine(lr, mm.M44(), mv, cam, vector.Line{Start: a, End: b})
 
-				a = b
-			}*/
+		a = b
+	}
 
-	for i := 0; i < 10000; i++ {
+	/*	for i := 0; i < 1000; i++ {
 		b := vector.RandV3(lr)
 		b = b.Normalize()
 
 		b = mm.MultV3(b)
 
-		acc.BlotPoint(mv, b, Fcolor{1, 1, 1, 1})
-	}
+		acc.BlotPoint(lr, mv, b, Fcolor{1, 1, 1, 1})
+	}*/
 
 	/*	for x := -1.0; x < 1.0; x += 0.1 {
 		acc.BlotLine(mv, cam, vector.Line{
