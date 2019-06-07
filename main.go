@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 	"image"
-	"time"
-	//	"image/png"
+	"image/png"
 	"math"
 	"math/rand"
-	//	"os"
+	"os"
+	"time"
 
 	"depth/vector"
 
@@ -23,7 +23,17 @@ type inputType struct {
 	Frame         int
 }
 
-func (f Fimg) BlotPoint(lr *rand.Rand, mv vector.M44, p vector.V3, c Fcolor) {
+func clamp(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+func (f Fimg) BlotPoint(lr *rand.Rand, pos vector.V3, mv vector.M44, p vector.V3, c Fcolor) {
 	p4 := vector.V4{p.X, p.Y, p.Z, 1}
 	p4 = mv.MultV4(p4)
 	pp := p4.HomogeneousToCartesian()
@@ -47,22 +57,58 @@ func (f Fimg) BlotPoint(lr *rand.Rand, mv vector.M44, p vector.V3, c Fcolor) {
 	x *= float64(w)
 	y *= float64(h)
 
-	antialias := 1
-	for i := 0; i < antialias*4; i++ {
-		ix := f.Rect.Min.X + int(x+(rand.Float64()*2.0-1.0))
-		iy := f.Rect.Min.Y + int(y+(rand.Float64()*2.0-1.0))
+	ix := int(x)
+	iy := int(y)
 
-		oldc := f.Get(ix, iy)
+	rxa := x - float64(ix)
+	rya := y - float64(iy)
 
-		newc := Fcolor{
-			c.R*c.A/float64(antialias) + oldc.R,
-			c.G*c.A/float64(antialias) + oldc.G,
-			c.B*c.A/float64(antialias) + oldc.B,
-			0,
-		}
+	rxb := 1.0 - rxa
+	ryb := 1.0 - rya
 
-		f.Set(ix, iy, newc)
-	}
+	ix += f.Rect.Min.X
+	iy += f.Rect.Min.Y
+
+	a := c.A
+
+	dist := p.Dist(pos)
+
+	radius := 3.0
+	strength := 3.0
+
+	atten := clamp(1.0 - (dist / radius))
+	atten *= atten
+
+	atten *= strength
+
+	//fmt.Println(dist)
+	//atten := pp.Z //* -0.5 + 1.0
+	//atten := math.Pow(2, -dist)
+	//fmt.Println(atten)
+
+	//a *= 1.0 / math.Pow(atten, -2)
+	//fmt.Println(atten)
+	a *= atten
+
+	c.A = a * rxb * ryb
+	f.Add(ix+0, iy+0, c)
+
+	c.A = a * rxa * ryb
+	f.Add(ix+1, iy+0, c)
+
+	c.A = a * rxb * rya
+	f.Add(ix+0, iy+1, c)
+
+	c.A = a * rxa * rya
+	f.Add(ix+1, iy+1, c)
+}
+
+func (f Fimg) Add(x, y int, c Fcolor) {
+	cc := f.Get(x, y)
+	cc.R += c.R * c.A
+	cc.G += c.G * c.A
+	cc.B += c.B * c.A
+	f.Set(x, y, cc)
 }
 
 func (img Fimg) BlotLine(lr *rand.Rand, mm, mv vector.M44, cam vector.Camera, ray vector.Line) {
@@ -88,12 +134,13 @@ func (img Fimg) BlotLine(lr *rand.Rand, mm, mv vector.M44, cam vector.Camera, ra
 		w := v.Add(vector.RandV3(lr).Scale(r))
 
 		c := Fcolor{1, 1, 1, a}
-		img.BlotPoint(lr, mv, w, c)
+		img.BlotPoint(lr, cam.Position, mv, w, c)
 	}
 }
 
 func render(input inputType) interface{} {
-	mm := vector.RotateAxisM33(vector.V3{0, -1, 0}, input.Rot)
+	//mm := vector.RotateAxisM33(vector.V3{0, -1, 0}, input.Rot)
+	mm := vector.RotateAxisM33(vector.V3{-1, -1, 0}, input.Rot)
 
 	lr := rand.New(rand.NewSource(1).(rand.Source64))
 	lr.Seed(666)
@@ -101,15 +148,18 @@ func render(input inputType) interface{} {
 	sx := input.Width / 2
 	sy := input.Height / 2
 
-	acc := NewFimg(image.Rect(-sx, -sy, sx-1, sy-1))
+	acc := NewFimg(image.Rect(-sx, -sy, sx, sy))
+
+	//acc.Set(0, 0, Fcolor{1, 1, 1, 1})
 
 	cam := vector.Camera{
 		Width:  float64(input.Width),
 		Height: float64(input.Height),
 
-		YFov: 120,
+		YFov: 100,
+
 		Near: 0.1,
-		Far:  100,
+		Far:  20,
 
 		Position: vector.V3{0, 0, 1.2},
 		RotAxis:  vector.Euler{
@@ -117,7 +167,24 @@ func render(input inputType) interface{} {
 		},
 	}
 
-	cam.SetupViewProjection()
+	//cam.SetupViewProjection()
+	//cam.View = vector.Frustum{
+	//	-float64(sy), float64(sx),
+	//	float64(sy), -float64(sx),
+	//	-1, 1,
+	//}
+	//cam.Projection = cam.View.M44()
+
+	//cam.Projection = vector.Ortho(
+	//	-float64(sx), float64(sx),
+	//	-float64(sy), float64(sy),
+	//	-1, 1)
+	x_ratio := float64(sx) / float64(sy)
+	cam.Projection = vector.Ortho(
+		-x_ratio, x_ratio,
+		-1, 1,
+		1.5, -2)
+
 	cam.SetupModelView()
 
 	mv := cam.ModelView.MultX(cam.Projection)
@@ -147,29 +214,31 @@ func render(input inputType) interface{} {
 		}
 	}
 
-	a := vector.RandV3(lr)
-	for i := 0; i < 1000; i++ {
-		b := vector.RandV3(lr).Scale(0.7)
-		b = a.Add(b)
-		b = b.Normalize()
+	_ = mm
 
-		//mmm := mv.Mult(mm.M44())
-		//mmm := mm.M44().Inverse().Mult(mv)
-		//mmm := mm.M44().Mult(mv.Inverse()).Inverse()
+	/*	a := vector.RandV3(lr)
+		for i := 0; i < 1000; i++ {
+			b := vector.RandV3(lr).Scale(0.7)
+			b = a.Add(b)
+			b = b.Normalize()
 
-		acc.BlotLine(lr, mm.M44(), mv, cam, vector.Line{Start: a, End: b})
+			//mmm := mv.Mult(mm.M44())
+			//mmm := mm.M44().Inverse().Mult(mv)
+			//mmm := mm.M44().Mult(mv.Inverse()).Inverse()
 
-		a = b
-	}
+			acc.BlotLine(lr, mm.M44(), mv, cam, vector.Line{Start: a, End: b})
 
-	/*	for i := 0; i < 1000; i++ {
+			a = b
+		}*/
+
+	for i := 0; i < 100; i++ {
 		b := vector.RandV3(lr)
 		b = b.Normalize()
 
 		b = mm.MultV3(b)
 
-		acc.BlotPoint(lr, mv, b, Fcolor{1, 1, 1, 1})
-	}*/
+		acc.BlotPoint(lr, cam.Position, mv, b, Fcolor{1, 1, 1, 1})
+	}
 
 	/*	for x := -1.0; x < 1.0; x += 0.1 {
 		acc.BlotLine(mv, cam, vector.Line{
@@ -223,29 +292,31 @@ func render(input inputType) interface{} {
 		})
 	}*/
 
+	//acc.Shine()
+
 	acc.Bg()
 
 	img := acc.ToNRGBA()
 
-	/*		w, err := os.Create(fmt.Sprintf("frame%08d.png", frame))
-			if err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
-			defer w.Close()
-			if err := png.Encode(w, img); err != nil {
-				fmt.Println(err)
-				os.Exit(1)
-			}
-
-		}*/
+	if input.Frame < 0 {
+		w, err := os.Create(fmt.Sprintf("frame%08d.png", input.Frame))
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		defer w.Close()
+		if err := png.Encode(w, img); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+	}
 
 	return img
 }
 
 func main() {
-	width := 640
-	height := 480
+	width := 1920
+	height := 1080
 
 	za := app.New()
 	w := za.NewWindow("main")
@@ -256,7 +327,7 @@ func main() {
 	go func() {
 		frame := 0
 		for {
-			for rot := vector.Radian(0); rot < 2*math.Pi; rot += 0.001 {
+			for rot := vector.Radian(0); rot < 2*math.Pi; rot += 0.01 {
 				inputs <- inputType{Width: width, Height: height, Rot: rot, Frame: frame}
 				frame++
 			}

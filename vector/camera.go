@@ -60,3 +60,20 @@ func (cam *Camera) Unproject(ix, iy float64) [2]V3 {
 		m.MultV4(near).HomogeneousToCartesian(),
 		m.MultV4(far).HomogeneousToCartesian()}
 }
+
+func Ortho(left, right, bottom, top, near, far float64) M44 {
+	tx := (right + left) / (right - left)
+	ty := (top + bottom) / (top - bottom)
+	tz := (far + near) / (far - near)
+
+	return M44{
+		2 / (right - left), 0, 0, -tx,
+		0, 2 / (top - bottom), 0, -ty,
+		0, 0, -2 / (far - near), -tz,
+		0, 0, 0, 1,
+		//		2 / (right - left), 0, 0, 0,
+		//		0, 2 / (top - bottom), 0, 0,
+		//		0, 0, -2 / (far - near), 0,
+		//		-tx, -ty, -tz, 1,
+	}
+}

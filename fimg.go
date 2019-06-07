@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image"
 )
 
@@ -94,7 +95,12 @@ func (f Fimg) ToNRGBA() *image.NRGBA {
 
 	img := image.NewNRGBA(r)
 
+	sum := 0.0
+
 	for i, v := range f.Pix {
+		if i%4 == 0 {
+			sum += v
+		}
 		c := int(v * 255.0)
 		if c < 0 {
 			c = 0
@@ -104,7 +110,8 @@ func (f Fimg) ToNRGBA() *image.NRGBA {
 		}
 		img.Pix[i] = uint8(c)
 	}
-
+	//fmt.Println(sum)
+	_ = fmt.Println
 	return img
 }
 
