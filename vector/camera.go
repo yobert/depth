@@ -21,6 +21,9 @@ type Camera struct {
 	// the modelview matrix
 	Position V3
 	RotAxis  Euler
+
+	// This is just for caching
+	ModelViewProjection M44
 }
 
 // Before calling this, set cam Width, Height, YFov, Near, and Far

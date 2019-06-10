@@ -33,10 +33,13 @@ func clamp(v float64) float64 {
 	return v
 }
 
-func (f Fimg) BlotPoint(lr *rand.Rand, pos vector.V3, mv vector.M44, p vector.V3, c Fcolor) {
-	p4 := vector.V4{p.X, p.Y, p.Z, 1}
-	p4 = mv.MultV4(p4)
-	pp := p4.HomogeneousToCartesian()
+func (f Fimg) BlotPoint(lr *rand.Rand, cam vector.Camera, p vector.V3, c Fcolor) {
+
+	pp := cam.ModelViewProjection.MultV4(p.CartesianToHomogeneous()).HomogeneousToCartesian()
+
+	//	p4 := vector.V4{p.X, p.Y, p.Z, 1}
+	//	p4 = cam.ModelViewProjection.MultV4(p4)
+	//	pp := p4.HomogeneousToCartesian()
 
 	// out of the clipping plane?
 	if pp.Z < -1 || pp.Z > 1 {
@@ -71,7 +74,7 @@ func (f Fimg) BlotPoint(lr *rand.Rand, pos vector.V3, mv vector.M44, p vector.V3
 
 	a := c.A
 
-	dist := p.Dist(pos)
+	dist := p.Dist(cam.Position)
 
 	radius := 3.0
 	strength := 3.0
@@ -88,6 +91,9 @@ func (f Fimg) BlotPoint(lr *rand.Rand, pos vector.V3, mv vector.M44, p vector.V3
 
 	//a *= 1.0 / math.Pow(atten, -2)
 	//fmt.Println(atten)
+
+	//atten = 1
+
 	a *= atten
 
 	c.A = a * rxb * ryb
@@ -111,36 +117,53 @@ func (f Fimg) Add(x, y int, c Fcolor) {
 	f.Set(x, y, cc)
 }
 
-func (img Fimg) BlotLine(lr *rand.Rand, mm, mv vector.M44, cam vector.Camera, ray vector.Line) {
+func (img Fimg) BlotLine(lr *rand.Rand, cam vector.Camera, line vector.Line, samples int, c Fcolor) {
 	//m := 0.3
-	//e := 3.0
-	m := 0.0
-	e := 0.0
+	m := 0.1
+	e := 3.0
+	//	m := 0.0
+	//	e := 0.0
 	f := 1.3
 
-	for i := 0; i < int(ray.Start.Dist(ray.End)*1000.0); i++ {
-		v := ray.Lerp(lr.Float64())
+	//	m = 0
 
-		v = mm.MultV3(v)
+	for i := 0; i < samples; i++ {
+		v := line.Lerp(lr.Float64())
+		//v := line.Lerp(float64(i) / float64(samples))
 
 		d := cam.Position.Dist(v)
 
 		//a := 1.0 / (math.Pow(d, 2))
 		//a *= 0.1
-		a := 0.005
-		//a := 1.0
+		//a := 0.005
+		//		a := 1.0 / float64(samples)
 
 		r := m * math.Pow(math.Abs(f-d), e)
 		w := v.Add(vector.RandV3(lr).Scale(r))
+		//		w := v
 
-		c := Fcolor{1, 1, 1, a}
-		img.BlotPoint(lr, cam.Position, mv, w, c)
+		a := 0.001
+		//		a := 0.1
+		//		a := 1.0
+
+		cc := c
+		cc.A *= a
+		img.BlotPoint(lr, cam, w, cc)
 	}
 }
 
+func slide(v vector.V3) vector.V3 {
+	return vector.V3{v.Y, v.Z, v.X}
+}
+func flip(v vector.V3) vector.V3 {
+	return vector.V3{v.X, v.Z, v.Y}
+}
 func render(input inputType) interface{} {
 	//mm := vector.RotateAxisM33(vector.V3{0, -1, 0}, input.Rot)
-	mm := vector.RotateAxisM33(vector.V3{-1, -1, 0}, input.Rot)
+	//mm := vector.RotateAxisM33(vector.V3{-2, -1, 0}.Normalize(), input.Rot).M44()
+
+	mm := vector.RotateAxisM33(vector.V3{-2, -1, 0}.Normalize(), 0.3).M44()
+	mm[14] += math.Cos(float64(input.Rot * 10))
 
 	lr := rand.New(rand.NewSource(1).(rand.Source64))
 	lr.Seed(666)
@@ -183,38 +206,12 @@ func render(input inputType) interface{} {
 	cam.Projection = vector.Ortho(
 		-x_ratio, x_ratio,
 		-1, 1,
-		1.5, -2)
+		//1.5, -2)
+		1.5, -3)
 
 	cam.SetupModelView()
 
-	mv := cam.ModelView.MultX(cam.Projection)
-
-	if false {
-		for x := -1.0; x < 1.0; x += 0.1 {
-			for y := -1.0; y < 1.0; y += 0.1 {
-				for z := -1.0; z < 1.0; z += 0.1 {
-					c := Fcolor{0.5, 0.5, 0.5, 1}
-					if x > 0.8 {
-						c.R = 1
-					}
-					if y > 0.8 {
-						c.G = 1
-					}
-					if z > 0.8 {
-						c.B = 1
-					}
-					p := vector.V4{x, y, z, 1}
-					p = mv.MultV4(p)
-					pp := p.HomogeneousToCartesian()
-					if pp.Z > -1 && pp.Z < 1 {
-						acc.Blot(pp.X, pp.Y, c)
-					}
-				}
-			}
-		}
-	}
-
-	_ = mm
+	cam.ModelViewProjection = cam.ModelView.MultX(cam.Projection)
 
 	/*	a := vector.RandV3(lr)
 		for i := 0; i < 1000; i++ {
@@ -231,66 +228,60 @@ func render(input inputType) interface{} {
 			a = b
 		}*/
 
-	for i := 0; i < 100; i++ {
-		b := vector.RandV3(lr)
-		b = b.Normalize()
+	white := Fcolor{1, 1, 1, 1}
+	samplefactor := 100000
 
+	/*	for i := 0; i < 1000; i++ {
+		a := vector.RandV3(lr)
+		a = a.Normalize()
+		b := a.Scale(1.2)
+
+		samples := b.Dist(a) * samplefactor
+
+		a = mm.MultV3(a)
 		b = mm.MultV3(b)
 
-		acc.BlotPoint(lr, cam.Position, mv, b, Fcolor{1, 1, 1, 1})
+		//acc.BlotPoint(lr, cam, a, Fcolor{1, 1, 1, 1})
+		//acc.BlotPoint(lr, cam, b, Fcolor{1, 1, 1, 1})
+		acc.BlotLine(lr, cam, vector.Line{a, b}, int(samples), Fcolor{1, 1, 1, 1})
+	}*/
+
+	cs := 2 * samplefactor
+
+	for v := -1.0; v < 1.0; v += 0.1 {
+
+		a := vector.V3{v, -1, -1}
+		b := vector.V3{v, 1, -1}
+
+		for iii := 0; iii < 2; iii++ {
+			for ii := 0; ii < 2; ii++ {
+				for i := 0; i < 3; i++ {
+					acc.BlotLine(lr, cam, vector.Line{mm.MultV3(a), mm.MultV3(b)}, cs, white)
+					a = slide(a)
+					b = slide(b)
+				}
+				a = flip(a)
+				b = flip(b)
+			}
+			a.Z *= -1
+			b.Z *= -1
+		}
 	}
 
-	/*	for x := -1.0; x < 1.0; x += 0.1 {
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{x, -1, -1},
-			End: vector.V3{x, 1, -1},
-		})
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{x, -1, -1},
-			End: vector.V3{x, -1, 1},
-		})
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{-1, x, -1},
-			End: vector.V3{1, x, -1},
-		})
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{-1, x, -1},
-			End: vector.V3{-1, x, 1},
-		})
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{-1, -1, x},
-			End: vector.V3{1, -1, x},
-		})
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{-1, -1, x},
-			End: vector.V3{-1, 1, x},
-		})
+	/*	acc.BlotLine(lr, cam, vector.Line{corners[0], corners[1]}, cs, white)
+		acc.BlotLine(lr, cam, vector.Line{corners[2], corners[3]}, cs, white)
+		acc.BlotLine(lr, cam, vector.Line{corners[4], corners[5]}, cs, white)
+		acc.BlotLine(lr, cam, vector.Line{corners[6], corners[7]}, cs, white)
 
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{x, -1, 1},
-			End: vector.V3{x, 1, 1},
-		})
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{x, 1, -1},
-			End: vector.V3{x, 1, 1},
-		})
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{-1, x, 1},
-			End: vector.V3{1, x, 1},
-		})
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{1, x, -1},
-			End: vector.V3{1, x, 1},
-		})
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{-1, 1, x},
-			End: vector.V3{1, 1, x},
-		})
-		acc.BlotLine(mv, cam, vector.Line{
-			Start: vector.V3{1, -1, x},
-			End: vector.V3{1, 1, x},
-		})
-	}*/
+		acc.BlotLine(lr, cam, vector.Line{corners[0], corners[2]}, cs, white)
+		acc.BlotLine(lr, cam, vector.Line{corners[1], corners[3]}, cs, white)
+		acc.BlotLine(lr, cam, vector.Line{corners[4], corners[6]}, cs, white)
+		acc.BlotLine(lr, cam, vector.Line{corners[5], corners[7]}, cs, white)
+
+		acc.BlotLine(lr, cam, vector.Line{corners[0], corners[4]}, cs, white)
+		acc.BlotLine(lr, cam, vector.Line{corners[1], corners[5]}, cs, white)
+		acc.BlotLine(lr, cam, vector.Line{corners[2], corners[6]}, cs, white)
+		acc.BlotLine(lr, cam, vector.Line{corners[3], corners[7]}, cs, white)*/
 
 	//acc.Shine()
 
@@ -298,18 +289,18 @@ func render(input inputType) interface{} {
 
 	img := acc.ToNRGBA()
 
-	if input.Frame < 0 {
-		w, err := os.Create(fmt.Sprintf("frame%08d.png", input.Frame))
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		defer w.Close()
-		if err := png.Encode(w, img); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
+	//	if input.Frame < 0 {
+	w, err := os.Create(fmt.Sprintf("frame%08d.png", input.Frame))
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
+	defer w.Close()
+	if err := png.Encode(w, img); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	//	}
 
 	return img
 }
@@ -327,7 +318,7 @@ func main() {
 	go func() {
 		frame := 0
 		for {
-			for rot := vector.Radian(0); rot < 2*math.Pi; rot += 0.01 {
+			for rot := vector.Radian(0); rot < 2*math.Pi; rot += 0.001 {
 				inputs <- inputType{Width: width, Height: height, Rot: rot, Frame: frame}
 				frame++
 			}

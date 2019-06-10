@@ -87,6 +87,10 @@ func (v V3) Eq(a V3) bool {
 	return false
 }
 
+func (v V3) CartesianToHomogeneous() V4 {
+	return V4{v.X, v.Y, v.Z, 1}
+}
+
 // Q will generate a non-normalized quaternion that will rotate by an angle vector of radians,
 // good for being multiplied with a normalized quatnernion representing an orientation.
 // UNTESTED + PROBABLY WRONG
