@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"math"
 )
 
 type Fimg struct {
@@ -128,5 +129,13 @@ func (f Fimg) Bg() {
 					f.Pix[i+2] *= a
 				}*/
 		f.Pix[i+3] = 1
+	}
+}
+
+func (f Fimg) Gamma(γ float64) {
+	for i := 0; i < len(f.Pix); i += 4 {
+		f.Pix[i+0] = math.Pow(f.Pix[i+0], 1.0/γ)
+		f.Pix[i+1] = math.Pow(f.Pix[i+1], 1.0/γ)
+		f.Pix[i+2] = math.Pow(f.Pix[i+2], 1.0/γ)
 	}
 }

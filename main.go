@@ -91,11 +91,13 @@ func (img Fimg) BlotPoint(lr *rand.Rand, cam vector.Camera, p vector.V3, c Fcolo
 
 	a := c.A
 
-	radius := 3.0
-	strength := 3.0
+	//radius := 3.0
+	strength := 2.0
 
-	atten := clamp(1.0 - (dist / radius))
-	atten *= atten
+	//atten := clamp(1.0 - (dist / radius))
+	//atten *= atten
+
+	atten := 1.0 / (dist * dist)
 
 	atten *= strength
 
@@ -285,6 +287,7 @@ func render(input inputType) interface{} {
 	//acc.Shine()
 
 	acc.Bg()
+	acc.Gamma(2.2)
 
 	img := acc.ToNRGBA()
 
