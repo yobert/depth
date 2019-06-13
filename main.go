@@ -17,6 +17,17 @@ import (
 	"fyne.io/fyne/widget"
 )
 
+const (
+	m = 0.7
+	//m = 0.1
+	e = 3.0
+	//	m = 0.0
+	//	e = 0.0
+	f = 1.3
+
+	//	m = 0
+)
+
 type inputType struct {
 	Width, Height int
 	Rot           vector.Radian
@@ -33,7 +44,13 @@ func clamp(v float64) float64 {
 	return v
 }
 
-func (f Fimg) BlotPoint(lr *rand.Rand, cam vector.Camera, p vector.V3, c Fcolor) {
+func (img Fimg) BlotPoint(lr *rand.Rand, cam vector.Camera, p vector.V3, c Fcolor) {
+	dist := p.Dist(cam.Position)
+
+	// focal tricks
+	r := m * math.Pow(math.Abs(f-dist), e)
+	p = p.Add(vector.RandV3(lr).Scale(r))
+	dist = p.Dist(cam.Position)
 
 	pp := cam.ModelViewProjection.MultV4(p.CartesianToHomogeneous()).HomogeneousToCartesian()
 
@@ -49,7 +66,7 @@ func (f Fimg) BlotPoint(lr *rand.Rand, cam vector.Camera, p vector.V3, c Fcolor)
 	x := pp.X
 	y := pp.Y
 
-	w, h := f.Rect.Dx(), f.Rect.Dy()
+	w, h := img.Rect.Dx(), img.Rect.Dy()
 
 	x += 1
 	y += 1
@@ -69,12 +86,10 @@ func (f Fimg) BlotPoint(lr *rand.Rand, cam vector.Camera, p vector.V3, c Fcolor)
 	rxb := 1.0 - rxa
 	ryb := 1.0 - rya
 
-	ix += f.Rect.Min.X
-	iy += f.Rect.Min.Y
+	ix += img.Rect.Min.X
+	iy += img.Rect.Min.Y
 
 	a := c.A
-
-	dist := p.Dist(cam.Position)
 
 	radius := 3.0
 	strength := 3.0
@@ -97,16 +112,16 @@ func (f Fimg) BlotPoint(lr *rand.Rand, cam vector.Camera, p vector.V3, c Fcolor)
 	a *= atten
 
 	c.A = a * rxb * ryb
-	f.Add(ix+0, iy+0, c)
+	img.Add(ix+0, iy+0, c)
 
 	c.A = a * rxa * ryb
-	f.Add(ix+1, iy+0, c)
+	img.Add(ix+1, iy+0, c)
 
 	c.A = a * rxb * rya
-	f.Add(ix+0, iy+1, c)
+	img.Add(ix+0, iy+1, c)
 
 	c.A = a * rxa * rya
-	f.Add(ix+1, iy+1, c)
+	img.Add(ix+1, iy+1, c)
 }
 
 func (f Fimg) Add(x, y int, c Fcolor) {
@@ -118,15 +133,6 @@ func (f Fimg) Add(x, y int, c Fcolor) {
 }
 
 func (img Fimg) BlotLine(lr *rand.Rand, cam vector.Camera, line vector.Line, samples int, c Fcolor) {
-	//m := 0.3
-	m := 0.1
-	e := 3.0
-	//	m := 0.0
-	//	e := 0.0
-	f := 1.3
-
-	//	m = 0
-
 	for i := 0; i < samples; i++ {
 		v := line.Lerp(lr.Float64())
 		//v := line.Lerp(float64(i) / float64(samples))
@@ -142,9 +148,9 @@ func (img Fimg) BlotLine(lr *rand.Rand, cam vector.Camera, line vector.Line, sam
 		w := v.Add(vector.RandV3(lr).Scale(r))
 		//		w := v
 
-		a := 0.001
+		//a := 0.001
 		//		a := 0.1
-		//		a := 1.0
+		a := 1.0
 
 		cc := c
 		cc.A *= a
@@ -162,8 +168,8 @@ func render(input inputType) interface{} {
 	//mm := vector.RotateAxisM33(vector.V3{0, -1, 0}, input.Rot)
 	//mm := vector.RotateAxisM33(vector.V3{-2, -1, 0}.Normalize(), input.Rot).M44()
 
-	mm := vector.RotateAxisM33(vector.V3{-2, -1, 0}.Normalize(), 0.3).M44()
-	mm[14] += math.Cos(float64(input.Rot * 10))
+	mm := vector.RotateAxisM33(vector.V3{-2, -1, 0}.Normalize(), input.Rot).M44()
+	//mm[14] += math.Cos(float64(input.Rot * 10))
 
 	lr := rand.New(rand.NewSource(1).(rand.Source64))
 	lr.Seed(666)
@@ -229,22 +235,15 @@ func render(input inputType) interface{} {
 		}*/
 
 	white := Fcolor{1, 1, 1, 1}
-	samplefactor := 100000
+	samplefactor := 100
 
-	/*	for i := 0; i < 1000; i++ {
-		a := vector.RandV3(lr)
-		a = a.Normalize()
-		b := a.Scale(1.2)
+	/*	alph := 1.0
 
-		samples := b.Dist(a) * samplefactor
-
-		a = mm.MultV3(a)
-		b = mm.MultV3(b)
-
-		//acc.BlotPoint(lr, cam, a, Fcolor{1, 1, 1, 1})
-		//acc.BlotPoint(lr, cam, b, Fcolor{1, 1, 1, 1})
-		acc.BlotLine(lr, cam, vector.Line{a, b}, int(samples), Fcolor{1, 1, 1, 1})
-	}*/
+		for i := 0; i < 100000; i++ {
+			a := vector.RandV3(lr).Normalize()
+			a = mm.MultV3(a)
+			acc.BlotPoint(lr, cam, a, Fcolor{1, 1, 1, alph})
+		}*/
 
 	cs := 2 * samplefactor
 
@@ -289,25 +288,25 @@ func render(input inputType) interface{} {
 
 	img := acc.ToNRGBA()
 
-	//	if input.Frame < 0 {
-	w, err := os.Create(fmt.Sprintf("frame%08d.png", input.Frame))
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+	if input.Frame < 0 {
+		w, err := os.Create(fmt.Sprintf("frame%08d.png", input.Frame))
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		defer w.Close()
+		if err := png.Encode(w, img); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	}
-	defer w.Close()
-	if err := png.Encode(w, img); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	//	}
 
 	return img
 }
 
 func main() {
-	width := 1920
-	height := 1080
+	width := 1920 / 2
+	height := 1080 / 2
 
 	za := app.New()
 	w := za.NewWindow("main")
