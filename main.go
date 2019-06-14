@@ -113,17 +113,21 @@ func (img Fimg) BlotPoint(lr *rand.Rand, cam vector.Camera, p vector.V3, c Fcolo
 
 	a *= atten
 
-	c.A = a * rxb * ryb
-	img.Add(ix+0, iy+0, c)
+	_ = rxb
+	_ = ryb
+	//c.A = a
+	c.A = 1
+	img.Add(ix, iy, c)
 
-	c.A = a * rxa * ryb
-	img.Add(ix+1, iy+0, c)
-
-	c.A = a * rxb * rya
-	img.Add(ix+0, iy+1, c)
-
-	c.A = a * rxa * rya
-	img.Add(ix+1, iy+1, c)
+	// lameo antialiasing
+	//c.A = a * rxb * ryb
+	//img.Add(ix+0, iy+0, c)
+	//c.A = a * rxa * ryb
+	//img.Add(ix+1, iy+0, c)
+	//c.A = a * rxb * rya
+	//img.Add(ix+0, iy+1, c)
+	//c.A = a * rxa * rya
+	//img.Add(ix+1, iy+1, c)
 }
 
 func (f Fimg) Add(x, y int, c Fcolor) {
@@ -248,6 +252,9 @@ func render(input inputType) interface{} {
 		}*/
 
 	cs := 2 * samplefactor
+	_ = mm
+	_ = white
+	_ = cs
 
 	for v := -1.0; v < 1.0; v += 0.1 {
 
@@ -257,7 +264,7 @@ func render(input inputType) interface{} {
 		for iii := 0; iii < 2; iii++ {
 			for ii := 0; ii < 2; ii++ {
 				for i := 0; i < 3; i++ {
-					acc.BlotLine(lr, cam, vector.Line{mm.MultV3(a), mm.MultV3(b)}, cs, white)
+//					acc.BlotLine(lr, cam, vector.Line{mm.MultV3(a), mm.MultV3(b)}, cs, white)
 					a = slide(a)
 					b = slide(b)
 				}
@@ -285,6 +292,8 @@ func render(input inputType) interface{} {
 		acc.BlotLine(lr, cam, vector.Line{corners[3], corners[7]}, cs, white)*/
 
 	//acc.Shine()
+
+	acc.BlotPoint(lr, cam, vector.V3{}, white)
 
 	acc.Bg()
 	acc.Gamma(2.2)
