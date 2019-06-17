@@ -20,12 +20,17 @@ import (
 const (
 	m = 0.7
 	//m = 0.1
+	//m = 0.0
 	e = 3.0
 	//	m = 0.0
 	//	e = 0.0
 	f = 1.3
 
 	//	m = 0
+
+	motion = 100
+	speed  = 0.01
+	save   = false
 )
 
 type inputType struct {
@@ -92,7 +97,7 @@ func (img Fimg) BlotPoint(lr *rand.Rand, cam vector.Camera, p vector.V3, c Fcolo
 	a := c.A
 
 	//radius := 3.0
-	strength := 2.0
+	strength := 1.0
 
 	//atten := clamp(1.0 - (dist / radius))
 	//atten *= atten
@@ -115,8 +120,8 @@ func (img Fimg) BlotPoint(lr *rand.Rand, cam vector.Camera, p vector.V3, c Fcolo
 
 	_ = rxb
 	_ = ryb
-	//c.A = a
-	c.A = 1
+	c.A = a
+	//c.A = 1
 	img.Add(ix, iy, c)
 
 	// lameo antialiasing
@@ -170,7 +175,7 @@ func slide(v vector.V3) vector.V3 {
 func flip(v vector.V3) vector.V3 {
 	return vector.V3{v.X, v.Z, v.Y}
 }
-func render(input inputType) interface{} {
+func render(input inputType) *Fimg {
 	//mm := vector.RotateAxisM33(vector.V3{0, -1, 0}, input.Rot)
 	//mm := vector.RotateAxisM33(vector.V3{-2, -1, 0}.Normalize(), input.Rot).M44()
 
@@ -264,7 +269,7 @@ func render(input inputType) interface{} {
 		for iii := 0; iii < 2; iii++ {
 			for ii := 0; ii < 2; ii++ {
 				for i := 0; i < 3; i++ {
-//					acc.BlotLine(lr, cam, vector.Line{mm.MultV3(a), mm.MultV3(b)}, cs, white)
+					acc.BlotLine(lr, cam, vector.Line{mm.MultV3(a), mm.MultV3(b)}, cs, white)
 					a = slide(a)
 					b = slide(b)
 				}
@@ -293,58 +298,62 @@ func render(input inputType) interface{} {
 
 	//acc.Shine()
 
-	acc.BlotPoint(lr, cam, vector.V3{}, white)
+	//	acc.BlotPoint(lr, cam, vector.V3{}, white)
 
 	acc.Bg()
-	acc.Gamma(2.2)
+	acc.Clamp()
 
-	img := acc.ToNRGBA()
+	return acc
 
-	if input.Frame < 0 {
-		w, err := os.Create(fmt.Sprintf("frame%08d.png", input.Frame))
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		defer w.Close()
-		if err := png.Encode(w, img); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-	}
+	//	acc.Gamma(2.2)
 
-	return img
+	//	img := acc.ToNRGBA()
+
+	//	if input.Frame < 0 {
+	/*		w, err := os.Create(fmt.Sprintf("frame%08d.png", input.Frame))
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			defer w.Close()
+			if err := png.Encode(w, img); err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}*/
+	//	}
+
+	//	return img
 }
 
 func main() {
-	width := 1920 / 2
-	height := 1080 / 2
+	width := 1920  // 2
+	height := 1080 // 2
 
 	za := app.New()
 	w := za.NewWindow("main")
 
-	showchan := make(chan interface{})
+	showchan := make(chan *image.NRGBA)
 	inputs := make(chan inputType)
 
 	go func() {
 		frame := 0
-		for {
-			for rot := vector.Radian(0); rot < 2*math.Pi; rot += 0.001 {
-				inputs <- inputType{Width: width, Height: height, Rot: rot, Frame: frame}
-				frame++
-			}
+		//for {
+		for rot := vector.Radian(0); rot < 2*math.Pi*10; rot += (speed / motion) {
+			inputs <- inputType{Width: width, Height: height, Rot: rot, Frame: frame}
+			frame++
 		}
+		//}
 		close(inputs)
 	}()
 
 	go func() {
-		results := make(chan chan interface{}, 4)
+		results := make(chan chan *Fimg, 8)
 
 		go func() {
 			for input := range inputs {
-				rc := make(chan interface{})
+				rc := make(chan *Fimg)
 				results <- rc
-				go func(input inputType, rc chan interface{}) {
+				go func(input inputType, rc chan *Fimg) {
 					rc <- render(input)
 					close(rc)
 				}(input, rc)
@@ -352,10 +361,37 @@ func main() {
 			close(results)
 		}()
 
+		var avg *Fimg
+
+		count := 0
+
 		for rc := range results {
 			r := <-rc
-			showchan <- r
+
+			if avg == nil {
+				avg = r
+			} else {
+				for i, p := range r.Pix {
+					avg.Pix[i] += p
+				}
+			}
+			count++
+
+			if count == motion {
+				if motion > 1 {
+					for i, p := range avg.Pix {
+						avg.Pix[i] = p / motion
+					}
+				}
+
+				avg.Gamma(2.2)
+				img := avg.ToNRGBA()
+				showchan <- img
+				avg = nil
+				count = 0
+			}
 		}
+
 		close(showchan)
 	}()
 
@@ -368,15 +404,27 @@ func main() {
 
 	go func() {
 
-		for res := range showchan {
+		frame := 0
+		for img := range showchan {
 			//time.Sleep(time.Second / 120)
-			time.Sleep(time.Second / 60)
+			//time.Sleep(time.Second / 60)
+			//			time.Sleep(time.Second / 24)
+			_ = time.Sleep
 			//time.Sleep(1)
-			img, ok := res.(*image.NRGBA)
-			if !ok {
-				fmt.Printf("not ok: %T\n", res)
-				continue
+
+			if save {
+				w, err := os.Create(fmt.Sprintf("frame%08d.png", frame))
+				if err != nil {
+					fmt.Println(err)
+					os.Exit(1)
+				}
+				defer w.Close()
+				if err := png.Encode(w, img); err != nil {
+					fmt.Println(err)
+					os.Exit(1)
+				}
 			}
+			frame++
 
 			baseimg = *img
 			widget.Refresh(vb)

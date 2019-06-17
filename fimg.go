@@ -132,6 +132,16 @@ func (f Fimg) Bg() {
 	}
 }
 
+func (f Fimg) Clamp() {
+	for i, v := range f.Pix {
+		if v > 1 {
+			f.Pix[i] = 1
+		} else if v < 0 {
+			f.Pix[i] = 0
+		}
+	}
+}
+
 func (f Fimg) Gamma(γ float64) {
 	for i := 0; i < len(f.Pix); i += 4 {
 		f.Pix[i+0] = math.Pow(f.Pix[i+0], 1.0/γ)
