@@ -9,12 +9,11 @@ import (
 	"os"
 	"time"
 
-	"depth/vector"
-
 	"fyne.io/fyne"
 	"fyne.io/fyne/app"
 	"fyne.io/fyne/canvas"
 	"fyne.io/fyne/widget"
+	"github.com/yobert/vector"
 )
 
 const (
